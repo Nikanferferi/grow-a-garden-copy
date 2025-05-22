@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Grow a Garden Plus</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #e0f7fa;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 { margin-bottom: 10px; }
+    #game {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 10px;
+      width: 100%;
+      max-width: 600px;
+      margin: 20px 0;
+    }
+    .plot {
+      background: #c5e1a5;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #558b2f;
+      border-radius: 8px;
+      cursor: pointer;
+      position: relative;
+    }
+    .plant {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+    }
+    .tomato { background: red; }
+    .cucumber { background: green; }
+    .flower { background: pink; }
+    .carrot { background: orange; }
+    .banana { background: yellow; }
+    .grown { transform: scale(1.6); }
+    button, select, input {
+      margin: 5px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: none;
+      font-size: 16px;
+    }
+    .tools, .menu {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    #info { margin: 10px; font-size: 18px; }
+    .badge {
+      background: gold;
+      padding: 5px 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌱 Grow a Garden Plus</h1>
+  <input type="text" id="username" placeholder="Ange namn" />
+  <button onclick="switchProfile()">Byt profil</button>
+  <div id="info">💰 Pengar: <span id="money">0</span> | 🏅 Sålda: <span id="sold">0</span></div>
+
+  <div class="menu">
+    <select id="seedSelect">
+      <option value="tomato">🍅 Tomat</option>
+      <option value="cucumber">🥒 Gurka</option>
+      <option value="flower">🌸 Blomma</option>
+      <option value="carrot">🥕 Morot</option>
+      <option value="banana">🍌 Banan</option>
+    </select>
+    <button onclick="toggleWater()">💧 Vattenkanna</button>
+    <button onclick="useFertilizer()">🌿 Gödsel (20 kr)</button>
+    <button onclick="buyUpgrade()">⚡ Uppgradera (50 kr)</button>
+    <button onclick="expandGarden()">🏡 Bygg ut (100 kr)</button>
+    <button onclick="toggleSound()">🔊 Ljud</button>
+  </div>
+
+  <div id="game"></div>
+  <div class="badge" id="achievement" style="display:none;"></div>
+
+  <audio id="plantSound" src="https://www.soundjay.com/button/button-4.mp3"></audio>
+  <audio id="harvestSound" src="https://www.soundjay.com/button/button-10.mp3"></audio>
+
+  <script>
+    const seedData = {
+      tomato: { time: 5000, profit: 10, class: 'tomato' },
+      cucumber: { time: 3000, profit: 7, class: 'cucumber' },
+      flower: { time: 4000, profit: 9, class: 'flower' },
+      carrot: { time: 6000, profit: 12, class: 'carrot' },
+      banana: { time: 8000, profit: 15, class: 'banana' }
+    };
+
+    let plots = [], profile = "default", money = 0, sold = 0;
+    let upgraded = false, watering = false, fertilized = false, soundOn = true;
+
+    const game = document.getElementById("game");
+    const moneyDisplay = document.getElementById("money");
+    const soldDisplay = document.getElementById("sold");
+    const usernameInput = document.getElementById("username");
+
+    function loadProfile(name) {
+      profile = name;
+      money = +localStorage.getItem(`${name}_money`) || 0;
+      sold = +localStorage.getItem(`${name}_sold`) || 0;
+      upgraded = localStorage.getItem(`${name}_upgraded`) === "true";
+      updateDisplay();
+      if (upgraded) document.querySelector("[onclick='buyUpgrade()']").disabled = true;
+    }
+
+    function saveProfile() {
+      localStorage.setItem(`${profile}_money`, money);
+      localStorage.setItem(`${profile}_sold`, sold);
+      localStorage.setItem(`${profile}_upgraded`, upgraded);
+    }
+
+    function updateDisplay() {
+      moneyDisplay.textContent = money;
+      soldDisplay.textContent = sold;
+      saveProfile();
+    }
+
+    function checkAchievements() {
+      if (sold >= 10) {
+        document.getElementById("achievement").style.display = "block";
+        document.getElementById("achievement").textContent = "🏆 Medalj: Sålt 10 plantor!";
+      }
+    }
+
+    function playSound(id) {
+      if (soundOn) document.getElementById(id).play();
+    }
+
+    function createPlot() {
+      const plot = document.createElement("div");
+      plot.className = "plot";
+      let hasPlant = false, grown = false, plantEl;
+
+      plot.addEventListener("click", () => {
+        if (!hasPlant) {
+          const type = document.getElementById("seedSelect").value;
+          const plant = document.createElement("div");
+          plant.className = `plant ${seedData[type].class}`;
+          plantEl = plant;
+          plot.appendChild(plant);
+          hasPlant = true;
+          playSound("plantSound");
+
+          let growTime = seedData[type].time;
+          if (upgraded) growTime *= 0.7;
+          if (watering) growTime *= 0.5;
+
+          setTimeout(() => {
+            plant.classList.add("grown");
+            grown = true;
+          }, growTime);
+
+        } else if (grown) {
+          plot.innerHTML = "";
+          hasPlant = false;
+          grown = false;
+          let type = document.getElementById("seedSelect").value;
+          let gain = seedData[type].profit * (fertilized ? 2 : 1);
+          fertilized = false;
+          money += gain;
+          sold++;
+          playSound("harvestSound");
+          updateDisplay();
+          checkAchievements();
+        }
+      });
+
+      return plot;
+    }
+
+    function generateGarden(n) {
+      game.innerHTML = "";
+      plots = [];
+      for (let i = 0; i < n; i++) {
+        const plot = createPlot();
+        plots.push(plot);
+        game.appendChild(plot);
+      }
+    }
+
+    function expandGarden() {
+      if (money >= 100) {
+        money -= 100;
+        generateGarden(plots.length + 3);
+        updateDisplay();
+      }
+    }
+
+    function toggleWater() {
+      watering = !watering;
+      event.target.style.background = watering ? "#81d4fa" : "";
+    }
+
+    function useFertilizer() {
+      if (money >= 20) {
+        money -= 20;
+        fertilized = true;
+        updateDisplay();
+      }
+    }
+
+    function buyUpgrade() {
+      if (!upgraded && money >= 50) {
+        money -= 50;
+        upgraded = true;
+        event.target.disabled = true;
+        event.target.textContent = "✅ Uppgraderad";
+        updateDisplay();
+      }
+    }
+
+    function toggleSound() {
+      soundOn = !soundOn;
+    }
+
+    function switchProfile() {
+      const name = usernameInput.value.trim();
+      if (name) loadProfile(name);
+    }
+
+    // Initiera spelet
+    loadProfile("default");
+    generateGarden(6);
+    checkAchievements();
+  </script>
+</body>
+</html>
